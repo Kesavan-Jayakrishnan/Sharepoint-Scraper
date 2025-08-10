@@ -1,0 +1,217 @@
+@page "/filetree"
+
+<h3>File System Explorer</h3>
+
+<div class="filetree-container">
+    @if (drives == null)
+    {
+        <p>Loading drives...</p>
+    }
+    else
+    {
+        <ul class="filetree">
+            @foreach (var drive in drives)
+            {
+                <li>
+                    <span class="tree-item @(IsSelected(drive.RootDirectory) ? "selected" : null)">
+                        <input type="checkbox" class="tree-checkbox" @onclick:stopPropagation="true" @onchange="e => ToggleChecked(drive.RootDirectory, (bool?)e.Value)" checked="@IsChecked(drive.RootDirectory)" />
+                        <span class="icon" @onclick:stopPropagation="true" @onclick="() => ToggleNode(drive.RootDirectory)">@(IsExpanded(drive.RootDirectory) ? "📂" : "📁")</span>
+                        <span class="name" @onclick="() => SelectDrive(drive)">@drive.Name</span>
+                    </span>
+                    @if (IsExpanded(drive.RootDirectory))
+                    {
+                        @RenderDirectory(drive.RootDirectory, 1)
+                    }
+                </li>
+            }
+        </ul>
+    }
+</div>
+
+@if (selectedItem != null)
+{
+    <div class="mt-3">
+        <strong>Selected:</strong> @selectedItem.FullName
+    </div>
+}
+
+@if (checkedItems.Count > 0)
+{
+    <div class="checked-list">
+        <strong>Checked items:</strong>
+        <ul>
+            @foreach (var path in checkedItems)
+            {
+                <li>@path</li>
+            }
+        </ul>
+    </div>
+}
+
+@code {
+    private DriveInfo[]? drives;
+    private FileSystemInfo? selectedItem;
+    private HashSet<string> expandedNodes = new();
+    private HashSet<string> checkedItems = new();
+
+    bool IsChecked(FileSystemInfo item) => checkedItems.Contains(item.FullName);
+
+    void ToggleChecked(FileSystemInfo item, bool? isChecked)
+    {
+        if (isChecked == true)
+            checkedItems.Add(item.FullName);
+        else
+            checkedItems.Remove(item.FullName);
+    }
+
+    protected override void OnInitialized()
+    {
+        drives = DriveInfo.GetDrives();
+    }
+
+    void ToggleNode(DirectoryInfo dir)
+    {
+        if (expandedNodes.Contains(dir.FullName))
+            expandedNodes.Remove(dir.FullName);
+        else
+            expandedNodes.Add(dir.FullName);
+    }
+
+    bool IsExpanded(DirectoryInfo dir) => expandedNodes.Contains(dir.FullName);
+
+    bool IsSelected(FileSystemInfo item) => selectedItem?.FullName == item.FullName;
+
+    void SelectDrive(DriveInfo drive)
+    {
+        selectedItem = drive.RootDirectory;
+    }
+
+    void SelectItem(FileSystemInfo item)
+    {
+        selectedItem = item;
+    }
+
+    RenderFragment RenderDirectory(DirectoryInfo dir, int level) => builder =>
+    {
+        try
+        {
+            var subDirs = dir.GetDirectories();
+            var files = dir.GetFiles();
+            builder.OpenElement(0, "ul");
+            builder.AddAttribute(1, "class", "filetree");
+            foreach (var sub in subDirs)
+            {
+                builder.OpenElement(2, "li");
+                builder.OpenElement(3, "span");
+                builder.AddAttribute(4, "class", $"tree-item{(IsSelected(sub) ? " selected" : "")}");
+                builder.AddAttribute(5, "style", $"padding-left: {level * 1.2}em;");
+                // Checkbox
+                builder.OpenElement(6, "input");
+                builder.AddAttribute(7, "type", "checkbox");
+                builder.AddAttribute(8, "class", "tree-checkbox");
+                builder.AddAttribute(9, "checked", IsChecked(sub));
+                builder.AddAttribute(10, "onchange", EventCallback.Factory.Create<ChangeEventArgs>(this, e => ToggleChecked(sub, (bool?)e.Value)));
+                builder.AddAttribute(11, "onclick:stopPropagation", true);
+                builder.CloseElement();
+                // Icon and name
+                builder.OpenElement(12, "span");
+                builder.AddAttribute(13, "class", "icon");
+                builder.AddAttribute(14, "onclick:stopPropagation", true);
+                builder.AddAttribute(15, "onclick", EventCallback.Factory.Create(this, () => ToggleNode(sub)));
+                builder.AddContent(16, IsExpanded(sub) ? "📂" : "📁");
+                builder.CloseElement();
+                builder.OpenElement(17, "span");
+                builder.AddAttribute(18, "class", "name");
+                builder.AddAttribute(19, "onclick", EventCallback.Factory.Create(this, () => SelectItem(sub)));
+                builder.AddContent(20, sub.Name);
+                builder.CloseElement();
+                builder.CloseElement();
+                if (IsExpanded(sub))
+                {
+                    builder.AddContent(10, RenderDirectory(sub, level + 1));
+                }
+                builder.CloseElement();
+            }
+            foreach (var file in files)
+            {
+                builder.OpenElement(11, "li");
+                builder.OpenElement(12, "span");
+                builder.AddAttribute(13, "class", $"tree-item file-item{(IsSelected(file) ? " selected" : "")}");
+                builder.AddAttribute(14, "style", $"padding-left: {level * 1.2}em; color: #888;");
+                // Checkbox
+                builder.OpenElement(15, "input");
+                builder.AddAttribute(16, "type", "checkbox");
+                builder.AddAttribute(17, "class", "tree-checkbox");
+                builder.AddAttribute(18, "checked", IsChecked(file));
+                builder.AddAttribute(19, "onchange", EventCallback.Factory.Create<ChangeEventArgs>(this, e => ToggleChecked(file, (bool?)e.Value)));
+                builder.AddAttribute(20, "onclick:stopPropagation", true);
+                builder.CloseElement();
+                // Icon and name
+                builder.AddContent(21, "📄 ");
+                builder.OpenElement(22, "span");
+                builder.AddAttribute(23, "class", "name");
+                builder.AddAttribute(24, "onclick", EventCallback.Factory.Create(this, () => SelectItem(file)));
+                builder.AddContent(25, file.Name);
+                builder.CloseElement();
+                builder.CloseElement();
+                builder.CloseElement();
+            }
+            builder.CloseElement();
+        }
+        catch { }
+    };
+}
+
+<style>
+.filetree-container {
+    max-width: 600px;
+    margin: 0 auto;
+    background: #f8f9fa;
+    border-radius: 8px;
+    padding: 1.5em;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+}
+.filetree {
+    list-style: none;
+    padding-left: 0;
+}
+.tree-item {
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.5em;
+    font-size: 1.05em;
+    padding: 0.2em 0.4em;
+    border-radius: 4px;
+    transition: background 0.15s;
+}
+.tree-item:hover {
+    background: #e2e6ea;
+}
+.file-item {
+    color: #888;
+}
+.icon {
+    width: 1.2em;
+    text-align: center;
+}
+.name {
+    flex: 1;
+}
+/* Highlight selected item */
+.tree-item.selected {
+    background: #b3d4fc;
+    color: #222;
+    font-weight: bold;
+}
+.tree-checkbox {
+    margin-right: 0.5em;
+}
+.checked-list {
+    margin-top: 1.5em;
+    background: #f1f3f6;
+    border-radius: 6px;
+    padding: 1em;
+    font-size: 0.98em;
+}
+</style>

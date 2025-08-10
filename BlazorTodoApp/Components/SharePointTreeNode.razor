@@ -1,0 +1,169 @@
+@using BlazorTodoApp.Services
+@inject ISharePointService SharePointService
+
+<li style="padding-left:@(Level * 1.2)em;">
+    @if (Item.IsFolder)
+    {
+        <span class="expand-icon" @onclick="ToggleExpandAsync" style="cursor:pointer; width:1.5em; text-align:center;">
+            @(Expanded ? "▼" : "►")
+        </span>
+    }
+    else
+    {
+        <span style="width:1.5em; display:inline-block;"></span>
+    }
+    <input type="checkbox" class="tree-checkbox" checked="@IsChecked" @onchange="OnCheckedChanged" @ref="checkboxRef" />
+    <span @onclick="OnNodeClicked" style="cursor:pointer; display: inline-block;">
+        @(Item.IsFolder ? "📁" : "📄") @Item.Name
+    </span>
+    @if (Item.IsFolder && Expanded && (childrenLoaded || (Item.Children?.Any() == true)))
+    {
+        <ul style="margin-bottom:0;">
+            @if (Item.Children != null)
+            {
+                @foreach (var child in Item.Children)
+                {
+                    <SharePointTreeNode Item="child" Level="@(Level + 1)" CheckedItems="CheckedItems" OnCheckChanged="OnCheckChanged" OnNodeSelected="OnNodeSelected" ParentPath="@CurrentPath" LibraryId="@LibraryId" />
+                }
+            }
+        </ul>
+    }
+</li>
+
+@code {
+    [Parameter] public SharePointItem Item { get; set; } = default!;
+    [Parameter] public int Level { get; set; } = 0;
+    [Parameter] public Dictionary<string, bool> CheckedItems { get; set; } = default!;
+    [Parameter] public EventCallback<(SharePointItem item, string path, bool isChecked)> OnCheckChanged { get; set; }
+    [Parameter] public EventCallback<(SharePointItem item, string path)> OnNodeSelected { get; set; }
+    [Parameter] public string ParentPath { get; set; } = string.Empty;
+    [Parameter] public string LibraryId { get; set; } = string.Empty;
+
+    private bool Expanded { get; set; } = false;
+    private bool childrenLoaded = false;
+    private string CurrentPath => string.IsNullOrEmpty(ParentPath) ? Item.Name : $"{ParentPath}/{Item.Name}";
+
+    private ElementReference checkboxRef;
+
+    private bool IsChecked => GetCheckState() == true;
+    private bool IsIndeterminate => GetCheckState() == null;
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (Item.IsFolder && Item.Children?.Any() == true)
+        {
+            var indeterminate = IsIndeterminate;
+            _ = SetIndeterminateAsync(indeterminate);
+        }
+    }
+
+    private async Task SetIndeterminateAsync(bool indeterminate)
+    {
+        await Task.Yield();
+        if (checkboxRef.Context != null)
+        {
+            await JS.InvokeVoidAsync("setIndeterminate", checkboxRef, indeterminate);
+        }
+    }
+
+    private bool? GetCheckState()
+    {
+        if (!Item.IsFolder || Item.Children == null || !Item.Children.Any())
+        {
+            return CheckedItems.TryGetValue(CurrentPath, out var v) && v;
+        }
+        var all = Item.Children.Select(child => GetChildCheckState(child, $"{CurrentPath}/{child.Name}", 1)).ToList();
+        if (all.All(x => x == true)) return true;
+        if (all.All(x => x == false)) return false;
+        return null; // indeterminate
+    }
+
+    private bool? GetChildCheckState(SharePointItem child, string path, int depth = 0)
+    {
+        // Prevent runaway recursion
+        if (depth > 20) return false;
+
+        if (!child.IsFolder)
+        {
+            return CheckedItems.TryGetValue(path, out var v) && v;
+        }
+        if (child.Children == null || child.Children.Count == 0)
+        {
+            return CheckedItems.TryGetValue(path, out var v) && v;
+        }
+        var all = child.Children.Select(grand => GetChildCheckState(grand, $"{path}/{grand.Name}", depth + 1)).ToList();
+        if (all.Count == 0)
+            return CheckedItems.TryGetValue(path, out var v) && v;
+        if (all.All(x => x == true)) return true;
+        if (all.All(x => x == false)) return false;
+        return null;
+    }
+
+    private async Task ToggleExpandAsync()
+    {
+        Expanded = !Expanded;
+        if (Expanded && Item.IsFolder && !childrenLoaded)
+        {
+            List<SharePointItem>? children = null;
+            if (Level == 1 && string.IsNullOrEmpty(ParentPath) && !string.IsNullOrEmpty(LibraryId))
+            {
+                children = await SharePointService.GetLibraryItemsAsync("stub", LibraryId);
+            }
+            else if (!string.IsNullOrEmpty(LibraryId))
+            {
+                children = await SharePointService.GetFolderChildrenAsync("stub", LibraryId, Item.Id);
+            }
+            if (children != null)
+            {
+                Item.Children = children;
+            }
+            childrenLoaded = true;
+            StateHasChanged();
+        }
+    }
+
+    private async Task OnCheckedChanged(ChangeEventArgs e)
+    {
+        var isChecked = (bool?)e.Value == true;
+        SetCheckRecursive(Item, CurrentPath, isChecked);
+        if (OnCheckChanged.HasDelegate)
+            await OnCheckChanged.InvokeAsync((Item, CurrentPath, isChecked));
+    }
+
+    private void SetCheckRecursive(SharePointItem node, string path, bool isChecked)
+    {
+        CheckedItems[path] = isChecked;
+        if (node.IsFolder && node.Children != null)
+        {
+            foreach (var child in node.Children)
+            {
+                SetCheckRecursive(child, $"{path}/{child.Name}", isChecked);
+            }
+        }
+    }
+
+    private async Task OnNodeClicked()
+    {
+        if (OnNodeSelected.HasDelegate)
+            await OnNodeSelected.InvokeAsync((Item, CurrentPath));
+    }
+}
+
+@inject IJSRuntime JS
+<style>
+.tree-checkbox {
+    margin-right: 0.5em;
+}
+.expand-icon {
+    font-size: 1.1em;
+    user-select: none;
+    display: inline-block;
+    width: 1.5em;
+    text-align: center;
+}
+ul {
+    list-style: none;
+    margin: 0;
+    padding-left: 0;
+}
+</style>

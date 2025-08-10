@@ -1,0 +1,1 @@
+This file is a placeholder to allow deletion of the duplicate SharePointTreeNode.razor file from the Pages folder.

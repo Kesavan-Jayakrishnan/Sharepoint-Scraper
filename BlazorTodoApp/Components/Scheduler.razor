@@ -1,0 +1,248 @@
+@using System.ComponentModel.DataAnnotations
+
+<style>
+.scheduler-card {
+    box-shadow: 0 2px 12px rgba(0,0,0,0.08), 0 1.5px 4px rgba(0,0,0,0.04);
+    border-radius: 12px;
+    border: none;
+    background: #fff;
+    margin-bottom: 2em;
+}
+.scheduler-card .card-body {
+    padding: 2.2em 2em 2em 2em;
+}
+.scheduler-section {
+    margin-bottom: 1.5em;
+    padding-bottom: 1em;
+    border-bottom: 1px solid #f0f0f0;
+}
+.scheduler-section:last-child {
+    border-bottom: none;
+}
+.scheduler-label {
+    font-weight: 600;
+    color: #2d3a4a;
+    margin-bottom: 0.3em;
+}
+.scheduler-select, .scheduler-input {
+    border-radius: 6px;
+    border: 1px solid #d1d5db;
+    padding: 0.5em 1em;
+    font-size: 1em;
+    margin-right: 0.5em;
+}
+.scheduler-summary {
+    background: #f8fafc;
+    border-radius: 8px;
+    padding: 1em 1.2em;
+    margin-top: 1.5em;
+    font-size: 1.08em;
+    color: #2d3a4a;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+}
+.scheduler-btn {
+    border-radius: 6px;
+    font-weight: 500;
+    padding: 0.5em 1.5em;
+    font-size: 1em;
+    margin-right: 0.7em;
+}
+.scheduler-btn-primary {
+    background: #2563eb;
+    color: #fff;
+    border: none;
+}
+.scheduler-btn-secondary {
+    background: #f3f4f6;
+    color: #374151;
+    border: none;
+}
+.scheduler-btn-primary:hover {
+    background: #1d4ed8;
+}
+.scheduler-btn-secondary:hover {
+    background: #e5e7eb;
+}
+</style>
+
+<div class="scheduler-card card mt-4 mb-2">
+    <div class="card-body">
+        <h4 class="mb-4" style="font-weight:700; color:#2563eb; letter-spacing:0.5px;">Scheduler</h4>
+        <div class="scheduler-section">
+            <div class="form-check mb-3">
+                <input class="form-check-input" type="checkbox" id="enableScheduling" @bind="EnableScheduling" />
+                <label class="form-check-label" for="enableScheduling" style="font-size:1.08em;">Enable scheduling</label>
+            </div>
+            <div class="mb-3">
+                <label class="scheduler-label">Schedule Type</label>
+                <select class="scheduler-select form-select w-auto d-inline-block ms-2" @bind="ScheduleType">
+                    <option value="once">One time</option>
+                    <option value="interval">Interval (every X minutes/hours)</option>
+                    <option value="daily">Daily</option>
+                    <option value="weekly">Weekly</option>
+                    <option value="monthly">Monthly</option>
+                    <option value="custom">Custom (cron)</option>
+                </select>
+            </div>
+        </div>
+        @if (EnableScheduling)
+        {
+            <div class="scheduler-section">
+                @if (ScheduleType == "once")
+                {
+                    <div class="mb-2">
+                        <label class="scheduler-label">Date & Time</label>
+                        <input type="datetime-local" class="scheduler-input form-control w-auto d-inline-block ms-2" @bind="OnceDateTime" />
+                    </div>
+                }
+                else if (ScheduleType == "interval")
+                {
+                    <div class="mb-2">
+                        <label class="scheduler-label">Every</label>
+                        <input type="number" min="1" class="scheduler-input form-control d-inline-block w-auto ms-2" style="width:80px;" @bind="IntervalValue" />
+                        <select class="scheduler-select form-select d-inline-block w-auto ms-2" style="width:100px;" @bind="IntervalUnit">
+                            <option value="minutes">minutes</option>
+                            <option value="hours">hours</option>
+                        </select>
+                    </div>
+                }
+                else if (ScheduleType == "daily")
+                {
+                    <div class="mb-2">
+                        <label class="scheduler-label">Every</label>
+                        <input type="number" min="1" class="scheduler-input form-control d-inline-block w-auto ms-2" style="width:80px;" @bind="DailyInterval" />
+                        <span class="ms-1">day(s) at</span>
+                        <input type="time" class="scheduler-input form-control d-inline-block w-auto ms-2" style="width:140px;" @bind="DailyTime" />
+                    </div>
+                }
+                else if (ScheduleType == "weekly")
+                {
+                    <div class="mb-2">
+                        <label class="scheduler-label">Every</label>
+                        <input type="number" min="1" class="scheduler-input form-control d-inline-block w-auto ms-2" style="width:80px;" @bind="WeeklyInterval" />
+                        <span class="ms-1">week(s) on</span>
+                        <div class="d-flex flex-wrap mt-2">
+                            @foreach (var day in DaysOfWeek)
+                            {
+                                <div class="form-check me-2">
+                                    <input class="form-check-input" type="checkbox" id="@day" @bind="SelectedDays[day]" />
+                                    <label class="form-check-label" for="@day">@day</label>
+                                </div>
+                            }
+                        </div>
+                        <span class="me-1">at</span>
+                        <input type="time" class="scheduler-input form-control d-inline-block w-auto ms-2" style="width:140px;" @bind="WeeklyTime" />
+                    </div>
+                }
+                else if (ScheduleType == "monthly")
+                {
+                    <div class="mb-2">
+                        <label class="scheduler-label">Day of month</label>
+                        <input type="number" min="1" max="31" class="scheduler-input form-control d-inline-block w-auto ms-2" style="width:80px;" @bind="MonthlyDay" />
+                        <span class="ms-1">at</span>
+                        <input type="time" class="scheduler-input form-control d-inline-block w-auto ms-2" style="width:140px;" @bind-value="MonthlyTime" @bind-value:event="oninput" />
+                    </div>
+                }
+                else if (ScheduleType == "custom")
+                {
+                    <div class="mb-2">
+                        <label class="scheduler-label">Cron Expression <span class="text-muted" style="font-size:0.95em;">(Advanced)</span></label>
+                        <input class="scheduler-input form-control w-auto d-inline-block ms-2" @bind="CronExpression" placeholder="e.g. 0 0 * * *" />
+                    </div>
+                }
+            </div>
+            <div class="scheduler-summary">
+                <b>Summary:</b>
+                <span class="ms-2">@GetSummary()</span>
+            </div>
+        }
+        <div class="mt-4">
+            <button class="scheduler-btn scheduler-btn-primary me-2" @onclick="OnApply">Apply</button>
+            <button class="scheduler-btn scheduler-btn-secondary" @onclick="OnCancel">Cancel</button>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public EventCallback<SchedulerConfig> OnSchedulerChanged { get; set; }
+    [Parameter] public EventCallback OnCancelClicked { get; set; }
+
+    public string TaskName { get; set; } = string.Empty;
+    public bool EnableScheduling { get; set; } = false;
+    public string ScheduleType { get; set; } = "once";
+    public DateTime? OnceDateTime { get; set; }
+    public int DailyInterval { get; set; } = 1;
+        public DateTime? DailyTime { get; set; } = DateTime.Today;
+    public int WeeklyInterval { get; set; } = 1;
+        public DateTime? WeeklyTime { get; set; } = DateTime.Today;
+    public int MonthlyDay { get; set; } = 1;
+        public DateTime? MonthlyTime { get; set; } = DateTime.Today;
+    public string CronExpression { get; set; } = string.Empty;
+    public int IntervalValue { get; set; } = 5;
+    public string IntervalUnit { get; set; } = "minutes";
+    public string[] DaysOfWeek { get; set; } = new[] { "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday" };
+    public Dictionary<string, bool> SelectedDays { get; set; } = new Dictionary<string, bool> {
+        { "Sunday", false }, { "Monday", false }, { "Tuesday", false }, { "Wednesday", false }, { "Thursday", false }, { "Friday", false }, { "Saturday", false }
+    };
+
+    private void OnApply()
+    {
+        var config = new SchedulerConfig
+        {
+            Type = EnableScheduling ? ScheduleType : "manual",
+            ScheduledDateTime = ScheduleType == "once" ? OnceDateTime : null,
+            IntervalMinutes = ScheduleType == "interval" ? (IntervalUnit == "minutes" ? IntervalValue : IntervalValue * 60)
+                : (ScheduleType == "daily" ? DailyInterval * 24 * 60 : (ScheduleType == "weekly" ? WeeklyInterval * 7 * 24 * 60 : (ScheduleType == "monthly" ? MonthlyDay * 24 * 60 : (int?)null))),
+            Cron = GetCronForCurrentSelection(),
+            // You can add more fields for weekly days, daily/weekly time, etc.
+        };
+        OnSchedulerChanged.InvokeAsync(config);
+    }
+    private void OnCancel()
+    {
+        OnCancelClicked.InvokeAsync();
+    }
+    private string GetSummary()
+    {
+        if (!EnableScheduling) return "Manual (no schedule)";
+        return ScheduleType switch
+        {
+            "once" => OnceDateTime.HasValue ? $"One time at {OnceDateTime.Value}" : "One time (date/time not set)",
+            "interval" => $"Every {IntervalValue} {IntervalUnit}",
+            "daily" => $"Every {DailyInterval} day(s) at {(DailyTime.HasValue ? DailyTime.Value.ToString("HH:mm") : "00:00")}",
+            "weekly" => $"Every {WeeklyInterval} week(s) on {string.Join(", ", SelectedDays.Where(kv => kv.Value).Select(kv => kv.Key))} at {(WeeklyTime.HasValue ? WeeklyTime.Value.ToString("HH:mm") : "00:00")}",
+            "monthly" => $"Day {MonthlyDay} at {(MonthlyTime.HasValue ? MonthlyTime.Value.ToString("HH:mm") : "00:00")}",
+            "custom" => $"Custom cron: {CronExpression}",
+            _ => "Unknown"
+        };
+    }
+    private string? GetCronForCurrentSelection()
+    {
+        if (ScheduleType == "custom")
+        {
+            return CronExpression;
+        }
+        if (ScheduleType == "interval")
+        {
+            if (IntervalUnit == "minutes")
+            {
+                // Every X minutes
+                return IntervalValue == 1 ? "* * * * *" : $"*/{IntervalValue} * * * *";
+            }
+            if (IntervalUnit == "hours")
+            {
+                // Every X hours, at minute 0
+                return IntervalValue == 1 ? "0 * * * *" : $"0 */{IntervalValue} * * *";
+            }
+        }
+        else if (ScheduleType == "monthly")
+        {
+            // Monthly on day X at HH:mm
+            var minute = MonthlyTime.HasValue ? MonthlyTime.Value.Minute : 0;
+            var hour = MonthlyTime.HasValue ? MonthlyTime.Value.Hour : 0;
+            return $"{minute} {hour} {MonthlyDay} * *";
+        }
+        // Optionally, add more for daily/weekly
+        return null;
+    }
+}

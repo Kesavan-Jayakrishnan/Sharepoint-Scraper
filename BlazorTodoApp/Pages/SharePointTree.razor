@@ -1,0 +1,341 @@
+@page "/sharepointtree"
+@using BlazorTodoApp.Services
+@using BlazorTodoApp.Pages
+@using BlazorTodoApp.Components
+@inject ISharePointService SharePointService
+
+<div class="sp-tree-card">
+    <div class="sp-tree-header">SharePoint Explorer (Stub)</div>
+    <div class="mb-3">
+        <input class="form-control" placeholder="Enter SharePoint Site URL..." @bind="siteUrl" />
+        <button class="sp-tree-btn sp-tree-btn-primary mt-2" @onclick="LoadSharePoint">Load</button>
+    </div>
+    @if (loading)
+    {
+        <p>Loading...</p>
+    }
+    else if (siteUrl != null && (sitePages != null || docLibraries != null))
+    {
+        <div class="row">
+            <div class="col-md-5 sp-tree-section">
+                <h5 style="font-weight:600; color:#374151;">Site Pages</h5>
+                <div class="mb-2">
+                    <input type="checkbox" @bind="allPagesChecked" />
+                    <span><b>Select All Pages</b></span>
+                </div>
+                @if (!allPagesChecked && showPagesList)
+                {
+                    <ul class="sp-tree-list">
+                        @foreach (var spPage in sitePages ?? new List<SharePointItem>())
+                        {
+                            if (!checkedItems.ContainsKey(spPage.Id)) checkedItems[spPage.Id] = false;
+                            <li>
+                                <input type="checkbox" @bind="checkedItems[spPage.Id]" />
+                                <span>@spPage.Name</span>
+                            </li>
+                        }
+                    </ul>
+                }
+            </div>
+            <div class="col-md-7 sp-tree-section">
+                <h5 style="font-weight:600; color:#374151;">Document Libraries</h5>
+                <ul class="sp-tree-list">
+                    @if (docLibraries != null)
+                    {
+                        @foreach (var lib in docLibraries)
+                        {
+                            var libPath = lib.Name;
+                            if (!checkedItems.ContainsKey(libPath)) checkedItems[libPath] = false;
+                            <li>
+                                <input type="checkbox" @bind="checkedItems[libPath]" />
+                                <span @onclick="() => ToggleLibrary(lib.Id)" style="cursor:pointer; font-weight:bold; color:#2563eb;">@lib.Name @(expandedLibs.Contains(lib.Id) ? "▼" : "►")</span>
+                                @if (expandedLibs.Contains(lib.Id) && libraryItems.ContainsKey(lib.Id))
+                                {
+                                    <ul>
+                                        @foreach (var item in libraryItems[lib.Id])
+                                        {
+                                            <SharePointTreeNode Item="item" Level="1" CheckedItems="checkedItems" OnCheckChanged="OnCheckChanged" OnNodeSelected="OnNodeSelected" ParentPath="@lib.Name" LibraryId="@lib.Id" />
+                                        }
+                                    </ul>
+                                }
+                            </li>
+                        }
+                    }
+                </ul>
+            </div>
+        </div>
+    }
+    <Scheduler OnSchedulerChanged="OnSchedulerChanged" />
+    <button class="sp-tree-btn sp-tree-btn-primary mt-3" @onclick="GenerateOutput">Generate Output JSON</button>
+    <pre class="json-output mt-2">@outputJson</pre>
+</div>
+
+@code {
+    private string? siteUrl;
+    private bool loading = false;
+    private List<SharePointItem>? sitePages;
+    private List<SharePointItem>? docLibraries;
+    private Dictionary<string, List<SharePointItem>> libraryItems = new();
+    private HashSet<string> expandedLibs = new();
+    private Dictionary<string, bool> checkedItems = new();
+    private string? lastSelectedPath;
+    private string outputJson = string.Empty;
+    private bool showPagesList = false;
+
+
+    private SchedulerConfig? schedulerConfig;
+
+    private void OnSchedulerChanged(SchedulerConfig config)
+    {
+        schedulerConfig = config;
+    }
+
+    private bool allPagesChecked
+    {
+        get => sitePages != null && sitePages.All(p => checkedItems.TryGetValue(p.Id, out var v) && v);
+        set
+        {
+            if (sitePages == null && !value)
+            {
+                // Simulate async fetch (real: call SharePoint API)
+                _ = LoadPagesAsync();
+            }
+            if (sitePages != null)
+            {
+                foreach (var p in sitePages)
+                {
+                    checkedItems[p.Id] = value;
+                }
+            }
+            showPagesList = !value;
+        }
+    }
+
+    private async Task LoadPagesAsync()
+    {
+        sitePages = await SharePointService.GetSitePagesAsync(siteUrl ?? "");
+        showPagesList = true;
+        StateHasChanged();
+    }
+    private void GenerateOutput()
+    {
+        var result = new SharePointExportResult
+        {
+            Name = siteUrl ?? "",
+            Type = "sharepoint",
+            Url = siteUrl ?? "",
+            Scope = GetScope(),
+            Items = GetExportItems(),
+            Scheduler = schedulerConfig
+        };
+        outputJson = System.Text.Json.JsonSerializer.Serialize(result, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+    }
+
+    private string GetScope()
+    {
+        if (checkedItems.Values.All(v => v)) return "full site";
+        if (sitePages != null && sitePages.All(p => checkedItems.TryGetValue(p.Id, out var v) && v)) return "all pages only";
+        return "custom";
+    }
+
+    private List<SharePointExportItem> GetExportItems()
+    {
+        var items = new List<SharePointExportItem>();
+        // Pages
+        if (sitePages != null)
+        {
+            foreach (var page in sitePages)
+            {
+                if (checkedItems.TryGetValue(page.Id, out var v) && v)
+                {
+                    items.Add(new SharePointExportItem { Type = "page", Path = page.Name });
+                }
+            }
+        }
+        // Document Libraries
+        if (docLibraries != null)
+        {
+            foreach (var lib in docLibraries)
+            {
+                var libPath = lib.Name;
+                // If all children are checked, add only the library
+                if (IsLibraryFullyChecked(lib))
+                {
+                    items.Add(new SharePointExportItem { Type = "doc lib", Path = libPath });
+                }
+                else if (libraryItems.TryGetValue(lib.Id, out var libItems))
+                {
+                    AddCheckedTreeItems(libItems, libPath, items);
+                }
+            }
+        }
+        return items;
+    }
+
+    private void AddCheckedTreeItems(List<SharePointItem> nodes, string parentPath, List<SharePointExportItem> items)
+    {
+        foreach (var node in nodes)
+        {
+            // For root of library, SharePointTreeNode uses just node.Name as path (not Documents/FolderA, but FolderA)
+            var path = string.IsNullOrEmpty(parentPath) && string.IsNullOrEmpty(node.Name) ? parentPath :
+                string.IsNullOrEmpty(parentPath) ? node.Name : $"{parentPath}/{node.Name}";
+            if (checkedItems.TryGetValue(path, out var v) && v)
+            {
+                items.Add(new SharePointExportItem { Type = node.IsFolder ? "folder" : "file", Path = path });
+                if (node.IsFolder) continue; // Don't add children if folder is checked
+            }
+            if (node.IsFolder && node.Children != null && node.Children.Count > 0)
+            {
+                AddCheckedTreeItems(node.Children, path, items);
+            }
+        }
+    }
+
+    // Helper to check if all children of a library are checked
+    private bool IsLibraryFullyChecked(SharePointItem lib)
+    {
+        var libPath = lib.Name;
+        if (!libraryItems.TryGetValue(lib.Id, out var libItems) || libItems.Count == 0)
+            return checkedItems.TryGetValue(libPath, out var v) && v;
+        return AreAllTreeItemsChecked(libItems, libPath);
+    }
+
+    private bool AreAllTreeItemsChecked(List<SharePointItem> nodes, string parentPath)
+    {
+        foreach (var node in nodes)
+        {
+            var path = $"{parentPath}/{node.Name}";
+            if (node.IsFolder && node.Children != null && node.Children.Count > 0)
+            {
+                if (!checkedItems.TryGetValue(path, out var v) || !v)
+                {
+                    if (!AreAllTreeItemsChecked(node.Children, path))
+                        return false;
+                }
+            }
+            else
+            {
+                if (!checkedItems.TryGetValue(path, out var v) || !v)
+                    return false;
+            }
+        }
+        return true;
+    }
+
+    private async Task LoadSharePoint()
+    {
+        if (string.IsNullOrWhiteSpace(siteUrl)) return;
+        loading = true;
+        sitePages = await SharePointService.GetSitePagesAsync(siteUrl);
+        docLibraries = await SharePointService.GetDocumentLibrariesAsync(siteUrl);
+        libraryItems.Clear();
+        expandedLibs.Clear();
+        checkedItems.Clear();
+        lastSelectedPath = null;
+        loading = false;
+        StateHasChanged();
+    }
+
+    private async Task ToggleLibrary(string libId)
+    {
+        if (!expandedLibs.Contains(libId))
+        {
+            expandedLibs.Add(libId);
+            if (!libraryItems.ContainsKey(libId))
+            {
+                var items = await SharePointService.GetLibraryItemsAsync(siteUrl!, libId);
+                libraryItems[libId] = items;
+            }
+        }
+        else
+        {
+            expandedLibs.Remove(libId);
+        }
+    }
+
+    private Task OnCheckChanged((SharePointItem item, string path, bool isChecked) args)
+    {
+        checkedItems[args.path] = args.isChecked;
+        return Task.CompletedTask;
+    }
+
+    private Task OnNodeSelected((SharePointItem item, string path) args)
+    {
+        lastSelectedPath = args.path;
+        return Task.CompletedTask;
+    }
+}
+
+<style>
+.sp-tree-card {
+    box-shadow: 0 2px 12px rgba(0,0,0,0.08), 0 1.5px 4px rgba(0,0,0,0.04);
+    border-radius: 12px;
+    border: none;
+    background: #fff;
+    margin-bottom: 2em;
+    padding: 2em 2em 2em 2em;
+}
+.sp-tree-header {
+    font-weight: 700;
+    color: #2563eb;
+    font-size: 1.4em;
+    margin-bottom: 1.2em;
+    letter-spacing: 0.5px;
+}
+.sp-tree-section {
+    margin-bottom: 1.5em;
+    padding-bottom: 1em;
+    border-bottom: 1px solid #f0f0f0;
+}
+.sp-tree-section:last-child {
+    border-bottom: none;
+}
+.sp-tree-list {
+    background: #f8fafc;
+    border-radius: 8px;
+    padding: 1em 1.2em;
+    margin-bottom: 1.5em;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+}
+.sp-tree-btn {
+    border-radius: 6px;
+    font-weight: 500;
+    padding: 0.5em 1.5em;
+    font-size: 1em;
+    margin-right: 0.7em;
+}
+.sp-tree-btn-primary {
+    background: #2563eb;
+    color: #fff;
+    border: none;
+}
+.sp-tree-btn-primary:hover {
+    background: #1d4ed8;
+}
+.checked-list {
+    margin-top: 1.5em;
+    background: #f1f3f6;
+    border-radius: 6px;
+    padding: 1em;
+    font-size: 0.98em;
+}
+.json-output {
+    background: #23272e;
+    color: #e6e6e6;
+    border-radius: 6px;
+    padding: 1em;
+    font-family: 'Fira Mono', 'Consolas', 'Menlo', monospace;
+    font-size: 1em;
+    overflow-x: auto;
+    white-space: pre;
+    margin-top: 1em;
+}
+.row {
+    display: flex;
+    gap: 2em;
+}
+.col-md-5, .col-md-7 {
+    flex: 1 1 0;
+    min-width: 0;
+}
+</style>

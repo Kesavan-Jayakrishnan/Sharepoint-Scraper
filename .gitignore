@@ -1,0 +1,45 @@
+# .gitignore for .NET/Blazor/Visual Studio
+# Build results
+bin/
+obj/
+
+# User-specific files
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# VS Code
+.vscode/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Rider
+.idea/
+*.sln.iml
+
+# ASP.NET Scaffolding
+ScaffoldingReadMe.txt
+
+# npm packages
+node_modules/
+
+# Others
+*.swp
+*.bak
+*.tmp
+*.orig
+
+# Publish output
+publish/
+
+# Test results
+TestResults/
+
+# Azure Pipelines
+*.azure-pipelines.yml
