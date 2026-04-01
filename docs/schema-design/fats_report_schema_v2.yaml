@@ -1,0 +1,310 @@
+schema_id: fats_report_v2
+version: 2.0.0
+description: >
+  Source-agnostic schema for extracting, validating, reconciling, and rendering
+  a FATS report from mixed input types (xlsx, pdf, docx, pptx, csv).
+
+metadata:
+  owner_team: Finance Operations
+  approved_by: Business Controller
+  effective_from: "2026-04-01"
+  timezone: UTC
+  locale: en-US
+
+input_contract:
+  allowed_types: [xlsx, csv, pdf, docx, pptx]
+  min_documents: 1
+  required_document_tags: [financial_source]
+  optional_document_tags: [supporting_notes, assumptions, annexure]
+  duplicate_policy: latest_upload_wins
+  empty_file_policy: reject
+
+fields:
+  - id: company_name
+    label: Company Name
+    type: string
+    required: true
+    extraction:
+      deterministic:
+        - when_type: xlsx
+          map: { sheet: Cover, cell: B2 }
+        - when_type: csv
+          map: { column: company_name, row: first_non_empty }
+      ai_fallback:
+        prompt_hint: Extract legal company name.
+    transform: [trim, normalize_spaces]
+    default: null
+    render_as: company_name
+
+  - id: report_date
+    label: Report Date
+    type: date
+    required: true
+    extraction:
+      deterministic:
+        - when_type: xlsx
+          map: { sheet: Cover, cell: B3 }
+      ai_fallback:
+        prompt_hint: Extract final report date.
+    transform:
+      - parse_date
+      - format_date: YYYY-MM-DD
+    render_as: report_date
+
+  - id: period_start
+    label: Period Start
+    type: date
+    required: true
+    extraction:
+      deterministic:
+        - when_type: xlsx
+          map: { sheet: Cover, cell: B5 }
+      ai_fallback:
+        prompt_hint: Extract reporting period start date.
+    transform:
+      - parse_date
+      - format_date: YYYY-MM-DD
+    render_as: period_start
+
+  - id: period_end
+    label: Period End
+    type: date
+    required: true
+    extraction:
+      deterministic:
+        - when_type: xlsx
+          map: { sheet: Cover, cell: B6 }
+      ai_fallback:
+        prompt_hint: Extract reporting period end date.
+    transform:
+      - parse_date
+      - format_date: YYYY-MM-DD
+    render_as: period_end
+
+  - id: currency_code
+    label: Currency Code
+    type: string
+    required: true
+    extraction:
+      deterministic:
+        - when_type: xlsx
+          map: { sheet: Cover, cell: B7 }
+        - when_type: csv
+          map: { column: currency }
+      ai_fallback:
+        prompt_hint: Extract reporting currency code (ISO 4217).
+    transform: [upper, trim]
+    default: USD
+    render_as: currency_code
+
+  - id: total_revenue
+    label: Total Revenue
+    type: number
+    required: true
+    extraction:
+      deterministic:
+        - when_type: xlsx
+          map: { sheet: P&L, cell: B12 }
+      ai_fallback:
+        prompt_hint: Extract total revenue for current period.
+    transform: [parse_number, { round: 2 }]
+    render_as: total_revenue
+
+  - id: total_cost
+    label: Total Cost
+    type: number
+    required: true
+    extraction:
+      deterministic:
+        - when_type: xlsx
+          map: { sheet: P&L, cell: B20 }
+      ai_fallback:
+        prompt_hint: Extract total cost.
+    transform: [parse_number, { round: 2 }]
+    render_as: total_cost
+
+  - id: ebitda
+    label: EBITDA
+    type: number
+    required: true
+    extraction:
+      deterministic:
+        - when_type: xlsx
+          map: { sheet: P&L, cell: B24 }
+      ai_fallback:
+        prompt_hint: Extract EBITDA.
+    transform: [parse_number, { round: 2 }]
+    render_as: ebitda
+
+  - id: risk_score
+    label: Risk Score
+    type: number
+    required: false
+    extraction:
+      deterministic: []
+      ai_fallback:
+        prompt_hint: Extract composite risk score if present else null.
+    transform: [parse_number, { round: 0 }]
+    default: null
+    render_as: risk_score
+
+tables:
+  - id: line_items
+    label: Revenue Line Items
+    required: true
+    extraction:
+      deterministic:
+        - when_type: xlsx
+          map: { sheet: LineItems, range: A2:F500, header_row: 1 }
+      ai_fallback:
+        prompt_hint: >
+          Extract table rows with columns: item_code, item_name, quantity,
+          unit_price, amount, region.
+    columns:
+      - { id: item_code, type: string, required: true, render_as: item_code }
+      - { id: item_name, type: string, required: true, render_as: item_name }
+      - { id: quantity, type: number, required: true, render_as: quantity, transform: [parse_number] }
+      - { id: unit_price, type: number, required: true, render_as: unit_price, transform: [parse_number, { round: 2 }] }
+      - { id: amount, type: number, required: true, render_as: amount, transform: [parse_number, { round: 2 }] }
+      - { id: region, type: string, required: false, default: UNKNOWN, render_as: region }
+    row_validations:
+      - id: li_qty_non_negative
+        expression: "quantity >= 0"
+        severity: error
+      - id: li_amount_non_negative
+        expression: "amount >= 0"
+        severity: error
+      - id: li_amount_consistency
+        expression: "abs(amount - (quantity * unit_price)) <= 1.00"
+        severity: warning
+    render_as: line_items
+
+derivations:
+  - id: gross_profit
+    type: number
+    expression: "total_revenue - total_cost"
+    transform: [{ round: 2 }]
+    render_as: gross_profit
+
+  - id: ebitda_margin_pct
+    type: number
+    expression: "if(total_revenue > 0, (ebitda / total_revenue) * 100, null)"
+    transform: [{ round: 2 }]
+    render_as: ebitda_margin_pct
+
+  - id: total_line_items_amount
+    type: number
+    expression: "sum(line_items.amount)"
+    transform: [{ round: 2 }]
+    render_as: total_line_items_amount
+
+  - id: reconciliation_gap
+    type: number
+    expression: "abs(total_revenue - total_line_items_amount)"
+    transform: [{ round: 2 }]
+    render_as: reconciliation_gap
+
+  - id: show_high_risk_note
+    type: boolean
+    expression: "risk_score != null and risk_score >= 80"
+    render_as: show_high_risk_note
+
+reconciliation_rules:
+  - id: recon_required_core_fields
+    category: completeness
+    severity: error
+    expression: "company_name != null and report_date != null and total_revenue != null and total_cost != null and ebitda != null"
+    message: One or more mandatory core fields are missing.
+    owner: Finance Ops
+
+  - id: recon_currency_format
+    category: validity
+    severity: warning
+    expression: "currency_code in ['USD','EUR','GBP','INR','AED','JPY']"
+    message: Currency code is non-standard or unsupported.
+    owner: Finance Ops
+
+  - id: recon_period_order
+    category: consistency
+    severity: error
+    expression: "period_start <= period_end"
+    message: Period start must be <= period end.
+    owner: Controller
+
+  - id: recon_gross_profit_formula
+    category: arithmetic
+    severity: error
+    expression: "abs(gross_profit - (total_revenue - total_cost)) <= 0.01"
+    message: Gross profit formula mismatch.
+    owner: Finance Ops
+
+  - id: recon_revenue_vs_line_items
+    category: arithmetic
+    severity: warning
+    expression: "reconciliation_gap <= 1.00"
+    message: Revenue and line-item sum differ beyond tolerance.
+    owner: Finance Ops
+
+  - id: recon_margin_bounds
+    category: validity
+    severity: warning
+    expression: "ebitda_margin_pct == null or (ebitda_margin_pct >= -100 and ebitda_margin_pct <= 100)"
+    message: EBITDA margin out of expected range.
+    owner: Controller
+
+  - id: recon_line_items_not_empty
+    category: completeness
+    severity: error
+    expression: "count(line_items) > 0"
+    message: Line items table is empty.
+    owner: Finance Ops
+
+  - id: recon_duplicate_item_code
+    category: consistency
+    severity: warning
+    expression: "count_distinct(line_items.item_code) == count(line_items.item_code)"
+    message: Duplicate item codes found in line items.
+    owner: Finance Ops
+
+policies:
+  confidence:
+    minimum_default: 0.80
+    field_override:
+      total_revenue: 0.90
+      ebitda: 0.88
+  null_handling:
+    required_field_on_null: fail
+    optional_field_on_null: keep_null
+  fallback:
+    deterministic_first: true
+    ai_retry_count: 2
+    on_low_confidence: human_review
+    on_recon_error: block_publish
+    on_recon_warning: allow_publish_with_warning
+  conflict_resolution:
+    rule: prefer_deterministic_then_highest_confidence
+  render:
+    jinja_strict_undefined: true
+    block_if_errors: true
+    include_reconciliation_appendix: true
+
+template_binding:
+  engine: jinja
+  template_file: fats_template.docx
+  scalars:
+    company_name: company_name
+    report_date: report_date
+    period_start: period_start
+    period_end: period_end
+    currency_code: currency_code
+    total_revenue: total_revenue
+    total_cost: total_cost
+    ebitda: ebitda
+    gross_profit: gross_profit
+    ebitda_margin_pct: ebitda_margin_pct
+    risk_score: risk_score
+    reconciliation_gap: reconciliation_gap
+  tables:
+    line_items: line_items
+  conditionals:
+    show_high_risk_note: show_high_risk_note
