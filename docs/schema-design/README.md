@@ -6,6 +6,7 @@ This folder contains production-ready artifacts for a source-agnostic document e
 2. **`fats_report_schema_v2.json`** - canonical runtime JSON form.
 3. **`jinja_output_contract.json`** - output structure required by Jinja rendering.
 4. **`jinja_output_sample_edge_cases.json`** - full sample output covering edge cases.
+5. **`USECASES.md`** - business and product use-case reference.
 
 ## Intent
 
