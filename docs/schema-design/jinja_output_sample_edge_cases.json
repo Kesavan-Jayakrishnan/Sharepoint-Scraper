@@ -1,0 +1,191 @@
+{
+  "meta": {
+    "schema_id": "fats_report_v2",
+    "schema_version": "2.0.0",
+    "job_id": "JOB-2026-00421",
+    "generated_at_utc": "2026-04-01T10:15:00Z",
+    "status": "ready_for_render",
+    "publish_decision": "allow_with_warning"
+  },
+  "jinja_context": {
+    "scalars": {
+      "company_name": "Contoso Manufacturing Ltd",
+      "report_date": "2026-03-25",
+      "period_start": "2026-01-01",
+      "period_end": "2026-03-31",
+      "currency_code": "USD",
+      "total_revenue": 1250000.5,
+      "total_cost": 980000.4,
+      "ebitda": 245000.0,
+      "gross_profit": 270000.1,
+      "ebitda_margin_pct": 19.6,
+      "risk_score": null,
+      "reconciliation_gap": 2.35
+    },
+    "tables": {
+      "line_items": [
+        {
+          "item_code": "A101",
+          "item_name": "Industrial Valve",
+          "quantity": 1200,
+          "unit_price": 150.0,
+          "amount": 180000.0,
+          "region": "NA"
+        },
+        {
+          "item_code": "A101",
+          "item_name": "Industrial Valve - Batch2",
+          "quantity": 200,
+          "unit_price": 150.0,
+          "amount": 30000.0,
+          "region": "NA"
+        },
+        {
+          "item_code": "B205",
+          "item_name": "Control Sensor",
+          "quantity": 850,
+          "unit_price": 220.0,
+          "amount": 187000.0,
+          "region": "EU"
+        }
+      ]
+    },
+    "conditionals": {
+      "show_high_risk_note": false
+    }
+  },
+  "reconciliation": {
+    "summary": {
+      "total_rules": 8,
+      "passed": 5,
+      "warnings": 3,
+      "failed": 0,
+      "overall_status": "PASSED_WITH_WARNING"
+    },
+    "rules": [
+      {
+        "rule_id": "recon_required_core_fields",
+        "category": "completeness",
+        "severity": "error",
+        "status": "PASSED",
+        "message": "All mandatory core fields are present."
+      },
+      {
+        "rule_id": "recon_period_order",
+        "category": "consistency",
+        "severity": "error",
+        "status": "PASSED",
+        "message": "Period start/end order is valid."
+      },
+      {
+        "rule_id": "recon_revenue_vs_line_items",
+        "category": "arithmetic",
+        "severity": "warning",
+        "status": "WARNING",
+        "message": "Revenue and line-item sum differ by 2.35 (>1.00 tolerance)."
+      },
+      {
+        "rule_id": "recon_duplicate_item_code",
+        "category": "consistency",
+        "severity": "warning",
+        "status": "WARNING",
+        "message": "Duplicate item codes detected in line items."
+      },
+      {
+        "rule_id": "recon_margin_bounds",
+        "category": "validity",
+        "severity": "warning",
+        "status": "PASSED",
+        "message": "EBITDA margin within expected bounds."
+      },
+      {
+        "rule_id": "recon_currency_format",
+        "category": "validity",
+        "severity": "warning",
+        "status": "PASSED",
+        "message": "Currency code is supported."
+      },
+      {
+        "rule_id": "recon_gross_profit_formula",
+        "category": "arithmetic",
+        "severity": "error",
+        "status": "PASSED",
+        "message": "Gross profit formula matched."
+      },
+      {
+        "rule_id": "recon_line_items_not_empty",
+        "category": "completeness",
+        "severity": "error",
+        "status": "PASSED",
+        "message": "Line items table has data."
+      }
+    ]
+  },
+  "quality": {
+    "field_confidence": {
+      "company_name": 0.98,
+      "report_date": 0.97,
+      "total_revenue": 0.95,
+      "total_cost": 0.94,
+      "ebitda": 0.92,
+      "risk_score": 0.0,
+      "line_items": 0.88
+    },
+    "issues": [
+      {
+        "type": "optional_missing",
+        "field": "risk_score",
+        "severity": "warning",
+        "message": "Risk score not found; kept as null."
+      },
+      {
+        "type": "table_duplicate",
+        "field": "line_items.item_code",
+        "severity": "warning",
+        "message": "Duplicate value A101 appears multiple times."
+      }
+    ]
+  },
+  "lineage": {
+    "fields": {
+      "company_name": {
+        "method": "structured_selector",
+        "source_type": "xlsx",
+        "confidence": 0.98,
+        "locator": {
+          "type": "cell_ref",
+          "value": "Cover!B2"
+        }
+      },
+      "total_revenue": {
+        "method": "structured_selector",
+        "source_type": "xlsx",
+        "confidence": 0.95,
+        "locator": {
+          "type": "cell_ref",
+          "value": "P&L!B12"
+        }
+      },
+      "risk_score": {
+        "method": "llm_extract",
+        "source_type": "pdf",
+        "confidence": 0.0,
+        "locator": {
+          "type": "chunk_snippet",
+          "value": "chunk:risk-summary-03#not_found"
+        }
+      }
+    },
+    "tables": {
+      "line_items": {
+        "method": "structured_selector",
+        "source_type": "xlsx",
+        "confidence": 0.88,
+        "locator": {
+          "type": "range_ref",
+          "value": "LineItems!A2:F500"
+        }
+      }
+    }
+  }
+}

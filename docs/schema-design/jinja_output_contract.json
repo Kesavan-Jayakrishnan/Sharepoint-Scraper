@@ -1,0 +1,80 @@
+{
+  "meta": {
+    "schema_id": "string",
+    "schema_version": "string",
+    "job_id": "string",
+    "generated_at_utc": "ISO-8601",
+    "status": "ready_for_render | blocked",
+    "publish_decision": "allow | allow_with_warning | block"
+  },
+  "jinja_context": {
+    "scalars": {
+      "<name>": "<value>"
+    },
+    "tables": {
+      "<table_name>": [
+        {
+          "<column>": "<value>"
+        }
+      ]
+    },
+    "conditionals": {
+      "<flag>": true
+    }
+  },
+  "reconciliation": {
+    "summary": {
+      "total_rules": 0,
+      "passed": 0,
+      "warnings": 0,
+      "failed": 0,
+      "overall_status": "PASSED | PASSED_WITH_WARNING | FAILED"
+    },
+    "rules": [
+      {
+        "rule_id": "string",
+        "category": "completeness | validity | arithmetic | consistency",
+        "severity": "error | warning",
+        "status": "PASSED | WARNING | FAILED",
+        "message": "string"
+      }
+    ]
+  },
+  "quality": {
+    "field_confidence": {
+      "<field>": 0.0
+    },
+    "issues": [
+      {
+        "type": "string",
+        "field": "string",
+        "severity": "warning | error",
+        "message": "string"
+      }
+    ]
+  },
+  "lineage": {
+    "fields": {
+      "<field>": {
+        "method": "structured_selector | docintel | llm_extract",
+        "source_type": "xlsx | csv | pdf | docx | pptx",
+        "confidence": 0.0,
+        "locator": {
+          "type": "cell_ref | named_range | table_row_key | heading_anchor | page_bbox | chunk_snippet",
+          "value": "string"
+        }
+      }
+    },
+    "tables": {
+      "<table>": {
+        "method": "structured_selector | docintel_table | llm_table_extract",
+        "source_type": "xlsx | csv | pdf | docx | pptx",
+        "confidence": 0.0,
+        "locator": {
+          "type": "range_ref | table_name | heading_anchor | page_bbox | chunk_snippet",
+          "value": "string"
+        }
+      }
+    }
+  }
+}
