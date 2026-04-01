@@ -1,0 +1,307 @@
+{
+  "schema_id": "fats_report_v2",
+  "version": "2.0.0",
+  "description": "Source-agnostic schema for extracting, validating, reconciling, and rendering a FATS report from mixed input types.",
+  "input_contract": {
+    "allowed_types": [
+      "xlsx",
+      "csv",
+      "pdf",
+      "docx",
+      "pptx"
+    ],
+    "min_documents": 1,
+    "selector_modes": [
+      "cell",
+      "range",
+      "column_name",
+      "header_alias",
+      "named_range"
+    ]
+  },
+  "fields": [
+    {
+      "id": "company_name",
+      "type": "string",
+      "required": true,
+      "extraction": {
+        "deterministic": [
+          {
+            "when_type": "xlsx",
+            "map": {
+              "sheet": "Cover",
+              "cell": "B2"
+            }
+          },
+          {
+            "when_type": "csv",
+            "map": {
+              "column": "company_name",
+              "row": "first_non_empty"
+            }
+          }
+        ],
+        "ai_fallback": {
+          "prompt_hint": "Extract legal company name."
+        }
+      },
+      "transform": [
+        "trim",
+        "normalize_spaces"
+      ],
+      "render_as": "company_name"
+    },
+    {
+      "id": "report_date",
+      "type": "date",
+      "required": true,
+      "extraction": {
+        "deterministic": [
+          {
+            "when_type": "xlsx",
+            "map": {
+              "sheet": "Cover",
+              "cell": "B3"
+            }
+          }
+        ],
+        "ai_fallback": {
+          "prompt_hint": "Extract final report date."
+        }
+      },
+      "transform": [
+        "parse_date",
+        {
+          "format_date": "YYYY-MM-DD"
+        }
+      ],
+      "render_as": "report_date"
+    },
+    {
+      "id": "total_revenue",
+      "type": "number",
+      "required": true,
+      "extraction": {
+        "deterministic": [
+          {
+            "when_type": "xlsx",
+            "map": {
+              "sheet": "P&L",
+              "cell": "B12"
+            }
+          }
+        ],
+        "ai_fallback": {
+          "prompt_hint": "Extract total revenue for current period."
+        }
+      },
+      "transform": [
+        "parse_number",
+        {
+          "round": 2
+        }
+      ],
+      "render_as": "total_revenue"
+    },
+    {
+      "id": "total_cost",
+      "type": "number",
+      "required": true,
+      "extraction": {
+        "deterministic": [
+          {
+            "when_type": "xlsx",
+            "map": {
+              "sheet": "P&L",
+              "cell": "B20"
+            }
+          }
+        ],
+        "ai_fallback": {
+          "prompt_hint": "Extract total cost."
+        }
+      },
+      "transform": [
+        "parse_number",
+        {
+          "round": 2
+        }
+      ],
+      "render_as": "total_cost"
+    },
+    {
+      "id": "ebitda",
+      "type": "number",
+      "required": true,
+      "extraction": {
+        "deterministic": [
+          {
+            "when_type": "xlsx",
+            "map": {
+              "sheet": "P&L",
+              "cell": "B24"
+            }
+          }
+        ],
+        "ai_fallback": {
+          "prompt_hint": "Extract EBITDA."
+        }
+      },
+      "transform": [
+        "parse_number",
+        {
+          "round": 2
+        }
+      ],
+      "render_as": "ebitda"
+    }
+  ],
+  "tables": [
+    {
+      "id": "line_items",
+      "required": true,
+      "extraction": {
+        "deterministic": [
+          {
+            "when_type": "xlsx",
+            "map": {
+              "sheet": "LineItems",
+              "header_row": 1,
+              "columns": [
+                "item_code",
+                "item_name",
+                "quantity",
+                "unit_price",
+                "amount",
+                "region"
+              ]
+            }
+          }
+        ],
+        "ai_fallback": {
+          "prompt_hint": "Extract table rows with columns: item_code, item_name, quantity, unit_price, amount, region."
+        }
+      },
+      "columns": [
+        {
+          "id": "item_code",
+          "type": "string",
+          "required": true
+        },
+        {
+          "id": "item_name",
+          "type": "string",
+          "required": true
+        },
+        {
+          "id": "quantity",
+          "type": "number",
+          "required": true
+        },
+        {
+          "id": "unit_price",
+          "type": "number",
+          "required": true
+        },
+        {
+          "id": "amount",
+          "type": "number",
+          "required": true
+        },
+        {
+          "id": "region",
+          "type": "string",
+          "required": false,
+          "default": "UNKNOWN"
+        }
+      ]
+    }
+  ],
+  "derivations": [
+    {
+      "id": "gross_profit",
+      "type": "number",
+      "expression": "total_revenue - total_cost"
+    },
+    {
+      "id": "ebitda_margin_pct",
+      "type": "number",
+      "expression": "if(total_revenue > 0, (ebitda / total_revenue) * 100, null)"
+    },
+    {
+      "id": "total_line_items_amount",
+      "type": "number",
+      "expression": "sum(line_items.amount)"
+    },
+    {
+      "id": "reconciliation_gap",
+      "type": "number",
+      "expression": "abs(total_revenue - total_line_items_amount)"
+    }
+  ],
+  "reconciliation_rules": [
+    {
+      "id": "recon_required_core_fields",
+      "severity": "error",
+      "expression": "company_name != null and report_date != null and total_revenue != null and total_cost != null and ebitda != null"
+    },
+    {
+      "id": "recon_period_order",
+      "severity": "error",
+      "expression": "period_start <= period_end"
+    },
+    {
+      "id": "recon_revenue_vs_line_items",
+      "severity": "warning",
+      "expression": "reconciliation_gap <= 1.00"
+    },
+    {
+      "id": "recon_duplicate_item_code",
+      "severity": "warning",
+      "expression": "count_distinct(line_items.item_code) == count(line_items.item_code)"
+    }
+  ],
+  "provenance": {
+    "goal": "Preserve auditable source tracing even when direct cell references are unavailable from Doc AI output.",
+    "locator_priority": [
+      "cell_ref",
+      "named_range",
+      "table_name_and_row_key",
+      "heading_and_label_anchor",
+      "page_and_bbox",
+      "chunk_id_and_snippet_hash"
+    ],
+    "rules": {
+      "require_locator_for_each_extracted_value": true,
+      "allow_semantic_locator_when_cell_ref_missing": true,
+      "unresolved_locator_policy": "warning"
+    }
+  },
+  "template_binding": {
+    "engine": "jinja",
+    "template_file": "fats_template.docx",
+    "strict_mode": true,
+    "scalars": {
+      "company_name": "company_name",
+      "report_date": "report_date",
+      "total_revenue": "total_revenue",
+      "total_cost": "total_cost",
+      "ebitda": "ebitda",
+      "gross_profit": "gross_profit",
+      "ebitda_margin_pct": "ebitda_margin_pct"
+    },
+    "tables": {
+      "line_items": "line_items"
+    },
+    "conditionals": {
+      "show_high_risk_note": "risk_score != null && risk_score >= 80"
+    }
+  },
+  "policies": {
+    "extraction_design": {
+      "column_name_preference": true,
+      "range_as_fallback": true,
+      "header_alias_support": true
+    }
+  }
+}
